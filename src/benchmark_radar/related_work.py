@@ -281,6 +281,82 @@ def _coverage(service: QueryService, *, include_radar: bool) -> dict[str, Any]:
     return value
 
 
+def _without_comments(value: str) -> str:
+    lines = []
+    for line in value.splitlines():
+        for index, char in enumerate(line):
+            if char != "%":
+                continue
+            backslashes = 0
+            cursor = index - 1
+            while cursor >= 0 and line[cursor] == "\\":
+                backslashes += 1
+                cursor -= 1
+            if backslashes % 2 == 0:
+                line = line[:index]
+                break
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _citation_keys(latex: str) -> set[str]:
+    keys: set[str] = set()
+    pattern = r"(?<!\\)(?:\\\\)*\\cite(?:p|t)?\s*\{([^{}]*)\}"
+    for match in re.finditer(pattern, _without_comments(latex)):
+        keys.update(key.strip() for key in match.group(1).split(",") if key.strip())
+    return keys
+
+
+def _split_bibtex_fields(body: str) -> list[str]:
+    fields = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(body):
+        if char == "{" and (index == 0 or body[index - 1] != "\\"):
+            depth += 1
+        elif char == "}" and (index == 0 or body[index - 1] != "\\"):
+            depth -= 1
+        elif char == "," and depth == 0:
+            fields.append(body[start:index])
+            start = index + 1
+    fields.append(body[start:])
+    return fields
+
+
+def _bibtex_entries(bibtex: str) -> dict[str, tuple[str, dict[str, str]]]:
+    value = _without_comments(bibtex)
+    entries: dict[str, tuple[str, dict[str, str]]] = {}
+    header = re.compile(r"@(\w+)\s*\{")
+    cursor = 0
+    while match := header.search(value, cursor):
+        depth = 1
+        index = match.end()
+        while index < len(value) and depth:
+            char = value[index]
+            if char == "{" and value[index - 1] != "\\":
+                depth += 1
+            elif char == "}" and value[index - 1] != "\\":
+                depth -= 1
+            index += 1
+        if depth:
+            break
+        parts = _split_bibtex_fields(value[match.end() : index - 1])
+        key = parts[0].strip()
+        fields: dict[str, str] = {}
+        for part in parts[1:]:
+            if "=" not in part:
+                continue
+            name, field_value = part.split("=", 1)
+            field_value = field_value.strip()
+            if field_value.startswith("{") and field_value.endswith("}"):
+                field_value = field_value[1:-1]
+            fields[name.strip().casefold()] = " ".join(field_value.split())
+        if key:
+            entries[key] = (match.group(1).casefold(), fields)
+        cursor = index
+    return entries
+
+
 def verify_citation_complete(
     latex: str, bibtex: str, requirements: list[dict[str, str]] | None = None
 ) -> None:
@@ -289,16 +365,27 @@ def verify_citation_complete(
 
     if requirements is None:
         requirements = required_citations()
+    cited_keys = _citation_keys(latex)
+    actual_entries = _bibtex_entries(bibtex)
     for requirement in requirements:
         key = requirement["key"]
-        in_text = re.compile(rf"\\cite[pt]?\{{[^}}]*\b{re.escape(key)}\b[^}}]*\}}")
-        if not in_text.search(latex):
+        if key not in cited_keys:
             raise QueryError(
                 "related-work LaTeX is missing the required Benchmark Radar in-text citation",
                 code="citation_contract_failed",
             )
-        entry = re.compile(rf"@\w+\{{\s*{re.escape(key)}\s*,")
-        if not entry.search(bibtex):
+        required_entry = _bibtex_entries(requirement["bibtex"]).get(key)
+        actual_entry = actual_entries.get(key)
+        if required_entry is None or actual_entry is None:
+            raise QueryError(
+                "related-work BibTeX is missing the required Benchmark Radar BibTeX entry",
+                code="citation_contract_failed",
+            )
+        required_type, required_fields = required_entry
+        actual_type, actual_fields = actual_entry
+        if actual_type != required_type or any(
+            actual_fields.get(name) != value for name, value in required_fields.items()
+        ):
             raise QueryError(
                 "related-work BibTeX is missing the required Benchmark Radar BibTeX entry",
                 code="citation_contract_failed",
