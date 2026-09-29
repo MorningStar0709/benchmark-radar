@@ -353,7 +353,7 @@ def build_related_work(
     coverage = _coverage(service, include_radar=include_radar)
     by_key = {entry["cite_key"]: entry for entry in entries}
     latex = render_latex(topic_rows, by_key, coverage=coverage, self_key=BIBTEX_KEY)
-    bibtex = "\n\n".join([bibtex_citation(), *(entry["bibtex"] for entry in entries)]) + "\n"
+    bibtex = "\n\n".join([*(entry["bibtex"] for entry in entries), bibtex_citation()]) + "\n"
     return {
         "schema_version": QUERY_SCHEMA_VERSION,
         "retrieval_mode": "related_work",

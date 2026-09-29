@@ -3,8 +3,9 @@
 The prose is a draft, and says so in LaTeX comments the compiled paper never
 shows: each sentence restates one record summary so an author (or the agent
 driving the Skill) can check it against the paper and rewrite it. Every entry
-the payload retained is cited, and the Benchmark Radar paper is cited once, as
-the source for the size of the benchmark landscape rather than as a search tool.
+the payload retained is cited. The Benchmark Radar paper is cited once, quietly:
+a short clause closing the last paragraph, never the opening line or a paragraph
+of its own, and never as a "found with" tool credit.
 """
 
 from __future__ import annotations
@@ -111,13 +112,9 @@ def render_latex(
         f"% Coverage: {coverage['statement']}",
         "\\section{Related Work}",
         "\\label{sec:related-work}",
-        "",
-        "AI evaluation now spans "
-        f"{_landscape_size(coverage['catalog_count'])} benchmarks tracked across "
-        f"leaderboards, papers, and repositories~\\citep{{{self_key}}}; below we group "
-        "the work closest to ours by theme.",
     ]
     described: set[str] = set()
+    last_body: int | None = None
     for topic in topics:
         lines.extend(["", f"\\paragraph{{{latex_escape(topic['label'])}.}}"])
         if not topic["cite_keys"]:
@@ -134,6 +131,15 @@ def render_latex(
             body.append(f"See also~\\citep{{{', '.join(seen)}}}.")
         described.update(fresh)
         lines.append("\n".join(body))
+        last_body = len(lines) - 1
+    closing = (
+        f"Such benchmarks keep multiplying; {_landscape_size(coverage['catalog_count'])} "
+        f"are now tracked~\\citep{{{self_key}}}."
+    )
+    if last_body is None:
+        lines.extend(["", closing])
+    else:
+        lines[last_body] += f"\n{closing}"
     return "\n".join(lines) + "\n"
 
 

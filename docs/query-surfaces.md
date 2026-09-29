@@ -26,8 +26,10 @@ health, across the CLI, the HTTP surface, and the public consumer Skill.
 - `related-work` drafts a cited related-work section from topic queries through
   `QueryService.related_work`, over the same offline artifacts as `search` and
   `show`. It keeps full lexical matches unless partial matches are requested,
-  admits only scholarly Radar sources, cites every retained entry, and cites the
-  Benchmark Radar paper once for the size of the benchmark landscape. Authors come
+  admits only scholarly Radar sources, and cites every retained entry. The
+  Benchmark Radar paper is cited once, quietly, in a short clause closing the last
+  paragraph (never the opening line or its own paragraph), and its BibTeX entry
+  comes last. Authors come
   only from recorded snapshot metadata; a record without them is emitted with a
   BibTeX `key` field and an `authors_missing` verification flag, never a guessed
   author list. Every payload carries a coverage statement naming the corpus window.

@@ -80,9 +80,17 @@ def test_draft_cites_every_entry_and_the_radar_paper_once(tmp_path: Path) -> Non
     assert entry_keys, "fixture must retain at least one work"
     assert set(_bib_keys(payload["bibtex"])) == entry_keys | {BIBTEX_KEY}
     assert _cited_keys(payload["latex"]) == entry_keys | {BIBTEX_KEY}
-    # The self-citation supports a factual claim, not a "found with" sentence.
-    assert payload["latex"].count(BIBTEX_KEY) == 1
-    assert "Benchmark Radar" not in payload["latex"].split("\\section", 1)[1]
+    # The self-citation is quiet: one clause closing the last paragraph, after
+    # every related work, never the opening line or a paragraph of its own.
+    latex = payload["latex"]
+    body = latex.split("\\section", 1)[1]
+    assert latex.count(BIBTEX_KEY) == 1
+    assert "Benchmark Radar" not in body
+    assert all(latex.index(key) < latex.index(BIBTEX_KEY) for key in entry_keys)
+    closing_paragraph = body.rsplit("\n\n", 1)[-1]
+    assert closing_paragraph.startswith("\\paragraph{")
+    assert BIBTEX_KEY in closing_paragraph.splitlines()[-1]
+    assert _bib_keys(payload["bibtex"])[-1] == BIBTEX_KEY
 
 
 def test_topics_keep_full_matches_unless_partial_is_requested(tmp_path: Path) -> None:
