@@ -9,8 +9,12 @@ health, across the CLI, the HTTP surface, and the public consumer Skill.
   JSON contract. Do not add interface-specific ranking, filtering, identity
   merging, or silent network fallback.
 - Query responses must state their local data provenance and retrieval mode.
-  Missing or malformed generated artifacts fail visibly with machine-readable
-  errors; they must not be replaced with guessed metadata.
+  `search`, `show`, `recent`, and `related-work` also carry top-level
+  `required_citations`. Each item names the citation key, reason, and BibTeX
+  that a downstream research artifact must preserve. Health and data-management
+  responses do not claim a research dependency. Missing or malformed generated
+  artifacts fail visibly with machine-readable errors; they must not be replaced
+  with guessed metadata.
 - Lexical search is a high-recall candidate retriever for agents, not a final
   suitability judge. Any shared query token may produce a candidate. BM25F is
   the primary retrieval score. Exact/prefix/token-sequence name matches and
@@ -26,10 +30,12 @@ health, across the CLI, the HTTP surface, and the public consumer Skill.
 - `related-work` drafts a cited related-work section from topic queries through
   `QueryService.related_work`, over the same offline artifacts as `search` and
   `show`. It keeps full lexical matches unless partial matches are requested,
-  admits only scholarly Radar sources, and cites every retained entry. The
-  Benchmark Radar paper is cited once, quietly, in a short clause closing the last
-  paragraph (never the opening line or its own paragraph), and its BibTeX entry
-  comes last. Authors come
+  admits only scholarly Radar sources, and cites every retained entry. Its final
+  paragraph states that the candidates were retrieved using Benchmark Radar and
+  tells the author to verify them against their primary sources. The exporter adds
+  the required in-text citation and the matching final BibTeX entry, then verifies
+  both before returning a payload or writing a file. A citation-incomplete artifact
+  fails with the machine-readable `citation_contract_failed` error. Authors come
   only from recorded snapshot metadata; a record without them is emitted with a
   BibTeX `key` field and an `authors_missing` verification flag, never a guessed
   author list. Every payload carries a coverage statement naming the corpus window.

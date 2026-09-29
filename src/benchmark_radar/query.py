@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .citation import citation_block
+from .citation import citation_block, required_citations
 from .snapshots import REQUIRED_SOURCES, load_snapshots
 
-QUERY_SCHEMA_VERSION = 6
+QUERY_SCHEMA_VERSION = 7
 DEFAULT_INDEX_PATH = Path("site/data/benchmark-index.json")
 DEFAULT_SHARD_DIR = Path("site/data/benchmarks")
 DEFAULT_SNAPSHOT_DIR = Path("data/snapshots")
@@ -460,10 +460,8 @@ class QueryService:
         return list(latest_by_identity.values())
 
     def _provenance(self) -> dict[str, Any]:
-        # `citation` rides here rather than in a separate top-level key so every
-        # payload command reports it through the one provenance path (issue
-        # #483 follow-up): an agent that reads stdout only still receives the
-        # paper, in a form it can put into a related-work table.
+        # Provenance retains the full citation formats for existing consumers.
+        # Research payloads also expose required_citations as the dependency contract.
         return {
             "source": "local",
             "citation": citation_block(),
@@ -604,6 +602,7 @@ class QueryService:
             "partial_match_count": partial_match_count,
             "count": len(results),
             "data": self._data_summary(scope=scope),
+            "required_citations": required_citations(),
             "results": results,
         }
 
@@ -679,6 +678,7 @@ class QueryService:
                 "catalog_path": str(self.paths.index),
                 "shard_path": str(path),
             },
+            "required_citations": required_citations(),
             "benchmark": shard,
         }
 
@@ -726,6 +726,7 @@ class QueryService:
             "limit": limit,
             "count": len(results),
             "data": self._data_summary(scope="radar"),
+            "required_citations": required_citations(),
             "results": results,
         }
 

@@ -20,7 +20,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .citation import BIBTEX_KEY, bibtex_citation, bibtex_citation_notice
+from .citation import BIBTEX_KEY, bibtex_citation, bibtex_citation_notice, required_citations
 from .related_work_render import latex_escape, render_latex, render_markdown
 
 if TYPE_CHECKING:
@@ -281,6 +281,30 @@ def _coverage(service: QueryService, *, include_radar: bool) -> dict[str, Any]:
     return value
 
 
+def verify_citation_complete(
+    latex: str, bibtex: str, requirements: list[dict[str, str]] | None = None
+) -> None:
+    """Reject a related-work artifact that drops a required citation dependency."""
+    from .query import QueryError
+
+    if requirements is None:
+        requirements = required_citations()
+    for requirement in requirements:
+        key = requirement["key"]
+        in_text = re.compile(rf"\\cite[pt]?\{{[^}}]*\b{re.escape(key)}\b[^}}]*\}}")
+        if not in_text.search(latex):
+            raise QueryError(
+                "related-work LaTeX is missing the required Benchmark Radar in-text citation",
+                code="citation_contract_failed",
+            )
+        entry = re.compile(rf"@\w+\{{\s*{re.escape(key)}\s*,")
+        if not entry.search(bibtex):
+            raise QueryError(
+                "related-work BibTeX is missing the required Benchmark Radar BibTeX entry",
+                code="citation_contract_failed",
+            )
+
+
 def build_related_work(
     service: QueryService,
     topics: list[str],
@@ -351,8 +375,14 @@ def build_related_work(
         row["cite_keys"] = [entry["cite_key"] for entry in row.pop("entries")]
 
     coverage = _coverage(service, include_radar=include_radar)
+    requirements = required_citations()
     by_key = {entry["cite_key"]: entry for entry in entries}
-    latex = render_latex(topic_rows, by_key, coverage=coverage, self_key=BIBTEX_KEY)
+    latex = render_latex(
+        topic_rows,
+        by_key,
+        coverage=coverage,
+        required_citation_key=requirements[0]["key"],
+    )
     bibtex = (
         "\n\n".join(
             [
@@ -363,6 +393,7 @@ def build_related_work(
         )
         + "\n"
     )
+    verify_citation_complete(latex, bibtex, requirements)
     return {
         "schema_version": QUERY_SCHEMA_VERSION,
         "retrieval_mode": "related_work",
@@ -379,4 +410,5 @@ def build_related_work(
         "bibtex": bibtex,
         "markdown": render_markdown(topic_rows, by_key, coverage=coverage),
         "data": service._data_summary(scope="all" if include_radar else "catalog"),
+        "required_citations": requirements,
     }

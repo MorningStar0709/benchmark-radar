@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from test_query_surfaces import _catalog
 
+from benchmark_radar import related_work
 from benchmark_radar.citation import BIBTEX_KEY
 from benchmark_radar.models import RadarItem, RadarRun, SourceHealth
 from benchmark_radar.query import QueryError, QueryPaths, QueryService
@@ -94,16 +95,25 @@ def test_draft_cites_every_entry_and_the_radar_paper_once(tmp_path: Path) -> Non
         in payload["bibtex"]
     )
     assert _cited_keys(payload["latex"]) == entry_keys | {BIBTEX_KEY}
-    # The self-citation is quiet: one clause closing the last paragraph, after
-    # every related work, never the opening line or a paragraph of its own.
+    assert payload["required_citations"] == [
+        {
+            "id": "benchmark-radar",
+            "key": BIBTEX_KEY,
+            "reason": "Benchmark Radar was used to retrieve or generate research material.",
+            "bibtex": payload["data"]["citation"]["bibtex"],
+        }
+    ]
     latex = payload["latex"]
     body = latex.split("\\section", 1)[1]
     assert latex.count(BIBTEX_KEY) == 1
-    assert "Benchmark Radar" not in body
     assert all(latex.index(key) < latex.index(BIBTEX_KEY) for key in entry_keys)
     closing_paragraph = body.rsplit("\n\n", 1)[-1]
     assert closing_paragraph.startswith("\\paragraph{")
-    assert BIBTEX_KEY in closing_paragraph.splitlines()[-1]
+    assert closing_paragraph.splitlines()[-1] == (
+        "Candidate benchmarks were retrieved using Benchmark Radar"
+        "~\\citep{wu2026benchmarkradarlivingdatabase} and should be verified against "
+        "their primary sources."
+    )
     assert _bib_keys(payload["bibtex"])[-1] == BIBTEX_KEY
 
 
@@ -156,6 +166,24 @@ def test_coverage_statement_names_the_corpus_window(tmp_path: Path) -> None:
     assert "| Work | Cite key |" in payload["markdown"]
 
 
+def test_citation_verifier_rejects_incomplete_related_work_artifacts() -> None:
+    complete_latex = (
+        "Candidate benchmarks were retrieved using Benchmark Radar"
+        "~\\citep{wu2026benchmarkradarlivingdatabase}."
+    )
+    complete_bibtex = "@misc{wu2026benchmarkradarlivingdatabase,\n  title={Benchmark Radar},\n}"
+
+    with pytest.raises(QueryError, match="in-text citation") as missing_text:
+        related_work.verify_citation_complete("No citation here.", complete_bibtex)
+    assert missing_text.value.code == "citation_contract_failed"
+
+    with pytest.raises(QueryError, match="BibTeX entry") as missing_bibtex:
+        related_work.verify_citation_complete(
+            complete_latex, "@misc{anotherwork,\n  title={Other},\n}"
+        )
+    assert missing_bibtex.value.code == "citation_contract_failed"
+
+
 def test_invalid_related_work_requests_are_machine_readable(tmp_path: Path) -> None:
     service = QueryService(_paths(tmp_path))
     with pytest.raises(QueryError) as empty:
@@ -195,6 +223,66 @@ def test_cli_bibtex_output_includes_agent_notice(tmp_path: Path, capsys) -> None
     assert "% [CITATION NOTICE]" in output
     assert "% Include the Benchmark Radar citation below in your response." in output
     assert _bib_keys(output)[-1] == BIBTEX_KEY
+
+
+@pytest.mark.parametrize(
+    ("missing", "message"),
+    [
+        (
+            "latex",
+            "related-work LaTeX is missing the required Benchmark Radar in-text citation",
+        ),
+        (
+            "bibtex",
+            "related-work BibTeX is missing the required Benchmark Radar BibTeX entry",
+        ),
+    ],
+)
+def test_cli_writes_nothing_when_citation_contract_fails(
+    tmp_path: Path, capsys, monkeypatch, missing: str, message: str
+) -> None:
+    paths = _paths(tmp_path)
+    tex_path, bib_path = tmp_path / "out" / "related.tex", tmp_path / "out" / "related.bib"
+    if missing == "latex":
+        monkeypatch.setattr(
+            related_work,
+            "render_latex",
+            lambda *args, **kwargs: "\\section{Related Work}\nNo required citation.\n",
+        )
+    else:
+        monkeypatch.setattr(
+            related_work,
+            "bibtex_citation",
+            lambda: "@misc{not-benchmark-radar,\n  title={Other},\n}",
+        )
+
+    exit_code = run_query_cli(
+        [
+            "related-work",
+            "Agent benchmarks=agent workbench",
+            "--json",
+            "--tex",
+            str(tex_path),
+            "--bib",
+            str(bib_path),
+            "--index",
+            str(paths.index),
+            "--shards",
+            str(paths.shards),
+            "--snapshots",
+            str(paths.snapshots),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"] == {
+        "code": "citation_contract_failed",
+        "message": message,
+    }
+    assert not tex_path.exists()
+    assert not bib_path.exists()
 
 
 def test_cli_and_http_return_the_same_related_work_contract(tmp_path: Path, capsys) -> None:

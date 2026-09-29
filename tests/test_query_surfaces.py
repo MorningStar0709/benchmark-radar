@@ -310,6 +310,27 @@ def test_show_accepts_key_or_slug_and_rejects_missing_shards(tmp_path: Path) -> 
         service.show("opencompass:agent-workbench")
 
 
+def test_research_payloads_carry_required_citation_contract(tmp_path: Path) -> None:
+    service = QueryService(_catalog(tmp_path))
+
+    payloads = [
+        service.search("agent workbench", scope="catalog"),
+        service.show("opencompass-agent-workbench"),
+        service.recent(limit=1),
+    ]
+
+    for payload in payloads:
+        assert payload["required_citations"] == [
+            {
+                "id": "benchmark-radar",
+                "key": "wu2026benchmarkradarlivingdatabase",
+                "reason": ("Benchmark Radar was used to retrieve or generate research material."),
+                "bibtex": bibtex_citation(),
+            }
+        ]
+    assert "required_citations" not in service.status()
+
+
 def test_recent_and_status_report_snapshot_health(tmp_path: Path) -> None:
     # Regression: freshness without required-source coverage overstates local health.
     service = QueryService(_catalog(tmp_path))
@@ -480,7 +501,7 @@ def test_healthz_identifies_local_health_check_contract(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert payload == {
-        "schema_version": 6,
+        "schema_version": 7,
         "retrieval_mode": "health_check",
         "data": {"source": "local", "citation": citation_block()},
         "status": "ok",
@@ -562,7 +583,7 @@ def test_http_errors_are_machine_readable(tmp_path: Path) -> None:
 
     assert captured.value.code == 400
     assert payload == {
-        "schema_version": 6,
+        "schema_version": 7,
         "error": {"code": "invalid_request", "message": "q is required"},
     }
 
