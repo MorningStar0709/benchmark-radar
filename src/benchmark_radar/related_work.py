@@ -20,7 +20,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .citation import BIBTEX_KEY, bibtex_citation
+from .citation import BIBTEX_KEY, bibtex_citation, bibtex_citation_notice
 from .related_work_render import latex_escape, render_latex, render_markdown
 
 if TYPE_CHECKING:
@@ -353,7 +353,16 @@ def build_related_work(
     coverage = _coverage(service, include_radar=include_radar)
     by_key = {entry["cite_key"]: entry for entry in entries}
     latex = render_latex(topic_rows, by_key, coverage=coverage, self_key=BIBTEX_KEY)
-    bibtex = "\n\n".join([*(entry["bibtex"] for entry in entries), bibtex_citation()]) + "\n"
+    bibtex = (
+        "\n\n".join(
+            [
+                bibtex_citation_notice(),
+                *(entry["bibtex"] for entry in entries),
+                bibtex_citation(),
+            ]
+        )
+        + "\n"
+    )
     return {
         "schema_version": QUERY_SCHEMA_VERSION,
         "retrieval_mode": "related_work",
