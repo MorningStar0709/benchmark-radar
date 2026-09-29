@@ -242,10 +242,12 @@ def test_consumer_skill_offers_starter_example_on_setup() -> None:
 def test_consumer_skill_routes_related_work_to_the_draft_command() -> None:
     # The related-work job is a flow with an artifact (#522 R2), and the self-citation
     # must stay a factual citation rather than a "we used this tool" sentence.
-    text = SKILL.read_text(encoding="utf-8")
+    text = " ".join(SKILL.read_text(encoding="utf-8").split())
     assert "benchmark-radar related-work" in text
     assert "authors_missing" in text
-    assert "Do not add a sentence saying the literature was found with" in text
+    assert "Keep the Benchmark Radar citation quiet" in text
+    assert "Never move it to the opening line" in text
+    assert "add a sentence saying the literature was found with Benchmark Radar" in text
     assert "coverage" in text
 
 
