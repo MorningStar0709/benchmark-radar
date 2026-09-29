@@ -21,7 +21,10 @@ from .query import (
 )
 from .query_http import serve_query_api
 
-QUERY_COMMANDS = frozenset({"init", "sync", "search", "show", "recent", "status", "serve"})
+QUERY_COMMANDS = frozenset(
+    {"init", "sync", "search", "show", "recent", "status", "serve", "related-work"}
+)
+RELATED_WORK_FORMATS = ("latex", "bibtex", "markdown")
 
 
 def _data_parent() -> argparse.ArgumentParser:
@@ -78,6 +81,29 @@ def _parser() -> argparse.ArgumentParser:
     recent.add_argument("--source")
     recent.add_argument("--recommended", action="store_true")
     recent.add_argument("--json", action="store_true")
+
+    related = subparsers.add_parser(
+        "related-work",
+        parents=[data_parent],
+        help="Draft a cited related-work section and BibTeX from topic queries.",
+    )
+    related.add_argument(
+        "topics",
+        nargs="+",
+        metavar="TOPIC",
+        help="A short query, or 'Label=query' to name the paragraph it becomes.",
+    )
+    related.add_argument("--per-topic", type=int, default=6)
+    related.add_argument(
+        "--include-partial",
+        action="store_true",
+        help="Keep candidates that miss some query tokens (noisier).",
+    )
+    related.add_argument("--no-radar", dest="include_radar", action="store_false")
+    related.add_argument("--format", choices=RELATED_WORK_FORMATS, default="latex")
+    related.add_argument("--tex", type=Path, help="Write the LaTeX section to this file.")
+    related.add_argument("--bib", type=Path, help="Write the BibTeX entries to this file.")
+    related.add_argument("--json", action="store_true")
 
     status = subparsers.add_parser(
         "status", parents=[data_parent], help="Inspect local catalog and snapshot health."
@@ -167,6 +193,32 @@ def _print_show(payload: dict[str, Any]) -> None:
             print(f"  {artifact.get('kind')}: {artifact.get('url')}")
 
 
+def _related_work_printer(args: argparse.Namespace) -> Callable[[dict[str, Any]], None]:
+    """Write requested files first, then print one format for the terminal."""
+
+    def printer(payload: dict[str, Any]) -> None:
+        for path, field in ((args.tex, "latex"), (args.bib, "bibtex")):
+            if path is not None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(payload[field], encoding="utf-8")
+                print(f"wrote {field} to {path}", file=sys.stderr)
+        if args.json:
+            _print_json(payload)
+            return
+        print(payload[args.format], end="")
+        flagged = [
+            entry for entry in payload["entries"] if "authors_missing" in entry["verification"]
+        ]
+        if flagged:
+            print(
+                f"\n% {len(flagged)} of {payload['count']} entries lack authors in local data; "
+                "complete them before citing.",
+                file=sys.stderr,
+            )
+
+    return printer
+
+
 def _print_status(payload: dict[str, Any]) -> None:
     print(f"status: {payload['status']}")
     print(f"catalog: {payload['catalog']['count']} records at {payload['catalog']['path']}")
@@ -228,6 +280,14 @@ def run_query_cli(argv: Sequence[str] | None = None) -> int:
                     recommended=args.recommended,
                 )
                 printer = _print_json if args.json else _print_recent
+            elif args.command == "related-work":
+                payload = service.related_work(
+                    args.topics,
+                    per_topic=args.per_topic,
+                    include_partial=args.include_partial,
+                    include_radar=args.include_radar,
+                )
+                printer = _related_work_printer(args)
             elif args.command == "status":
                 payload = service.status()
                 printer = _print_json if args.json else _print_status

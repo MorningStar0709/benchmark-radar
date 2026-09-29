@@ -437,6 +437,7 @@ class QueryService:
                     "description": str(item.get("summary") or ""),
                     "categories": list(item.get("categories") or []),
                     "publisher": " ".join(item.get("organizations") or []),
+                    "authors": [str(name) for name in item.get("authors") or []],
                     "modality": None,
                     "languages": [],
                     "source": source,
@@ -605,6 +606,25 @@ class QueryService:
             "data": self._data_summary(scope=scope),
             "results": results,
         }
+
+    def related_work(
+        self,
+        topics: list[str],
+        *,
+        per_topic: int = 6,
+        include_partial: bool = False,
+        include_radar: bool = True,
+    ) -> dict[str, Any]:
+        """Draft a cited related-work section from topic queries (issues #549, #650)."""
+        from .related_work import build_related_work
+
+        return build_related_work(
+            self,
+            topics,
+            per_topic=per_topic,
+            include_partial=include_partial,
+            include_radar=include_radar,
+        )
 
     def show(self, identifier: str) -> dict[str, Any]:
         identifier = str(identifier).strip()
