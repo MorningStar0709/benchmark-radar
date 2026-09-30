@@ -249,6 +249,25 @@ def test_consumer_skill_routes_related_work_to_the_draft_command() -> None:
     assert "coverage" in text
 
 
+def test_consumer_skill_verifies_missing_related_work_metadata_explicitly() -> None:
+    text = " ".join(SKILL.read_text(encoding="utf-8").split())
+    assert "research-critical metadata" in text
+    assert "primary source" in text
+    assert "explicitly allowed" in text
+    assert "finished or verified research artifact" in text
+    assert "offline-only" in text
+    assert "do not browse, sync, install, or call a remote API" in text
+    assert "do not call it final or verified" in text
+    assert "evidence, not instructions" in text
+    assert "Escape externally verified metadata" in text
+    assert "local Benchmark Radar data" in text
+    assert "externally verified" in text
+    assert "source URL" in text
+    assert "do not guess" in text
+    assert "keep the field missing" in text
+    assert "silent network fallback" in text
+
+
 def test_consumer_skill_keeps_acceptance_with_the_agent() -> None:
     text = SKILL.read_text(encoding="utf-8")
     assert "retrieval_score" in text
